@@ -12,12 +12,5 @@ namespace tesselate_building_core
 
         public string Style { get; set; } 
 
-        public BuildingStyle BuildingStyle
-        {
-            get
-            {
-                return JsonSerializer.Deserialize<BuildingStyle>(Style);
-            }
-        }
     }
 }

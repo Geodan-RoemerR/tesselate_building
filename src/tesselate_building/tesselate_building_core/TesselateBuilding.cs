@@ -9,7 +9,7 @@ namespace tesselate_building_core
 {
     public static class TesselateBuilding
     {
-        public static (PolyhedralSurface polyhedral, List<string> colors) MakeBuilding(Polygon footprint, double fromZ, double height, BuildingStyle buildingStyle)
+        public static PolyhedralSurface MakeBuilding(Polygon footprint, double fromZ, double height)
         {
             var colors = new List<string>();
             var polyhedral = new PolyhedralSurface();
@@ -17,21 +17,9 @@ namespace tesselate_building_core
 
             polyhedral.Geometries.Add(GetPolygonZ(footprint, fromZ));
             polyhedral.Geometries.Add(GetPolygonZ(footprint, fromZ + height));
-            if (buildingStyle.Storeys == null)
-            {
-                var walls = MakeWalls(footprint, fromZ, height - fromZ);
-                polyhedral.Geometries.AddRange(walls);
-            }
-            else
-            {
-                {
-                    foreach (var storey in buildingStyle.Storeys)
-                    {
-                        var walls = MakeWalls(footprint, fromZ + storey.From, storey.To - storey.From);
-                        polyhedral.Geometries.AddRange(walls);
-                    }
-                }
-            }
+           
+            var walls = MakeWalls(footprint, fromZ, height - fromZ);
+            polyhedral.Geometries.AddRange(walls);
 
             var stream = new MemoryStream();
             polyhedral.Serialize<WkbSerializer>(stream);
@@ -39,57 +27,7 @@ namespace tesselate_building_core
             var triangulatedWkb = Triangulator.Triangulate(wkb);
             var polyhedralNew = (PolyhedralSurface)Geometry.Deserialize<WkbSerializer>(triangulatedWkb);
 
-            foreach (var polygon in polyhedralNew.Geometries)
-            {
-                var normal = polygon.GetNormal();
-
-                if (Math.Abs(normal.X) > Math.Abs(normal.Y) && Math.Abs(normal.X) > Math.Abs(normal.Z) ||
-                        (Math.Abs(normal.Y) > Math.Abs(normal.Z)))
-                {
-                    //  (yz) projection
-                    if (buildingStyle.WallsColor == null)
-                    {
-                        // use storeys
-                        var storeyColor = GetStoreyColor(polygon, buildingStyle.Storeys);
-                        colors.Add(storeyColor);
-
-                    }
-                    else
-                    {
-                        colors.Add(buildingStyle.WallsColor);
-                    }
-                }
-                else
-                {
-                    // (xy) projextion
-                    if (polygon.ExteriorRing.Points[0].Z == fromZ)
-                    {
-                        // floor
-                        colors.Add(buildingStyle.FloorColor);
-                    }
-                    else
-                    {
-                        // roof
-                        colors.Add(buildingStyle.RoofColor);
-                    }
-                }
-            }
-            return (polyhedralNew, colors);
-        }
-
-        private static string GetStoreyColor(Polygon polygon, List<Storey> storeys)
-        {
-            var minz = Double.MaxValue;
-            var maxz = Double.MinValue;
-
-            foreach (var p in polygon.ExteriorRing.Points)
-            {
-                if (p.Z > maxz) { maxz = (double)p.Z; };
-                if (p.Z < minz) { minz = (double)p.Z; };
-            }
-
-            var storey = storeys.Where(storey => storey.From == minz && storey.To == maxz).FirstOrDefault();
-            return storey.Color;
+            return polyhedralNew;
         }
 
         private static Polygon GetPolygonZ(Polygon polygon, double z)
@@ -126,6 +64,24 @@ namespace tesselate_building_core
             }
 
             return polygons;
+        }
+
+        public static PolyhedralSurface ToPolyhedral(MultiPolygon multiPolygon) {
+            var polyhedral = new PolyhedralSurface();
+            polyhedral.Dimension = Dimension.Xyz;
+
+            foreach(var polygon in multiPolygon.Geometries) {
+                polyhedral.Geometries.Add(polygon);
+            }
+
+            // Triangulate polyhedralsurface
+            var stream = new MemoryStream();
+            polyhedral.Serialize<WkbSerializer>(stream);
+            var wkb = stream.ToArray();
+            var triangulatedWkb = Triangulator.Triangulate(wkb);
+            var polyhedralNew = (PolyhedralSurface)Geometry.Deserialize<WkbSerializer>(triangulatedWkb);
+
+            return polyhedralNew;
         }
     }
 }
