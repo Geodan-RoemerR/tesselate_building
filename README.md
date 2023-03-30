@@ -1,23 +1,8 @@
 # tesselate_building
 
-Console tool for creating triangulated polyhedralsurface from (building) footprint and height value. Shaders per triangle are written to the 'shaders' column. Buildings can have multiple storeys.
+Console tool for creating triangulated polyhedralsurface from MultiPolygonZ, PolyhedralSurfaceZ and (building) footprint through height value. Shaders per triangle are written to the '{inputgeometrycolumn}_3d_triangle shaders' column.
 
 This tool is designed to create the correct input information for creating 3D tiles with pg2b3dm (https://github.com/Geodan/pg2b3dm). This tool is used in the pg2b3dm 'getting started' sample see https://github.com/Geodan/pg2b3dm/blob/master/getting_started.md
-
-## Installation
-
-
-Prerequisite: .NET 6.0 SDK is installed https://dotnet.microsoft.com/download/dotnet/6.0
-
-```
-$ dotnet tool install -g tesselate_building
-```
-
-Or update
-
-```
-$ dotnet tool update -g tesselate_building
-```
 
 
 ## Running
@@ -45,80 +30,16 @@ If --username and/or --dbname are not specified the current username is used as 
 
   -i, --inputgeometrycolumn     (Default: geom) Input geometry column
 
-  -o, --outputgeometrycolumn    (Default: geom3d) Output geometry column
-
-  -f, --format                  (Default: mapbox) Output format mapbox/cesium
-
   --heightcolumn                (Default: height) height column
 
   --idcolumn                    (Default: id) Id column
-
-  --stylecolumn                 (Default: style) Style column
-
-  --shaderscolumn                (Default: shaders) Shaders column 
+  
+  --color                       (Default: #FFFFFF) Batched model color in hex
 
   --help                        Display this help screen.
 
   --version                     Display version information.
   ```
-
-## Building Styling
-
-For building styling a json column is used. Please note the the json keys are case sensitive. 
-
-Simple content (without storeys):
-
-```
-{
-  "walls": "#00ff00",
-  "roof": " #ff0000",
-  "floor": "#D3D3D3",
-}
-```
-
-Style content with storeys:
-
-```
-{
-  "roof": " #ff0000",
-  "floor": "#D3D3D3",
-  "storeys": [
-    {
-      "from": 0,
-      "to": 0.5,
-      "color": "#D3D3D3"
-    },
-    {
-      "from": 0.5,
-      "to": 1,
-      "color": "#D3SS3D3"
-    },
-    {
-      "from": 1,
-      "to": 1.5,
-      "color": "#D354S3D3"
-    }
-  ]
-}
-```
-
-If both element 'walls' and 'storeys' are defined the 'walls' property will be used.
-
-## Docker 
-
-Image on Docker hub: https://hub.docker.com/repository/docker/bertt/tesselate_building
-
-Run app in Docker:
-
-```
-$ docker run -it bertt/tesselate_building -U postgres -d postgres -t delaware_buildings -f mapbox -i geom -o geom_triangle --idcolumn ogc_fid --stylecolumn style --shaderscolumn shaders
-```
-
-Build sample application in Docker:
-
-```
-$ docker build -t bertt/tesselate_building .
-```
 
 ## Dependencies
 
@@ -130,4 +51,5 @@ $ docker build -t bertt/tesselate_building .
 
 ## History
 
+2023-03-30: forked and added MultiPolygonZ and PolyhedralSurfaceZ support, as well as automatically creating shader and output column.
 2022-01-24: release 0.2 to from .NET 5 to .NET 6
