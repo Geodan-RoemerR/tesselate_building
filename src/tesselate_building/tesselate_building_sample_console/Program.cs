@@ -50,7 +50,9 @@ namespace tesselate_building_sample_console
 
 
                 // Query single geometry for determining type
-                var singularGeomSql = $"select ST_AsEWKT({o.InputGeometryColumn}) as geometry, ST_NDims({o.InputGeometryColumn}) as dimensions, {o.IdColumn} as id from {o.Table} LIMIT 1;";
+                var singularGeomSql = @$"select ST_AsEWKT({o.InputGeometryColumn}) as geometry, 
+                                            ST_NDims({o.InputGeometryColumn}) as dimensions, 
+                                            {o.IdColumn} as id from {o.Table} LIMIT 1;";
                 dynamic singularGeom = conn.QuerySingle(singularGeomSql);
                 Geometry inputGeometry = Geometry.Deserialize<EwktSerializer>(singularGeom.geometry);
 
@@ -129,8 +131,9 @@ namespace tesselate_building_sample_console
                     var wkt = polyhedral.SerializeString<WktSerializer>();
 
                     // Update table row
-                    var updateSql = $"update {o.Table} set {outputGeometryColumn} = ST_Transform(ST_Force3D(St_SetSrid(ST_GeomFromText('{wkt}'), {inputGeometry.Srid})), {outputProjection})" +
-                            $" where {o.IdColumn}={building.Id};";
+                    var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
+                                        ST_Transform(ST_Force3D(St_SetSrid(ST_GeomFromText('{wkt}'), {inputGeometry.Srid})), {outputProjection}) 
+                                        where {o.IdColumn}={building.Id};";
                     conn.Execute(updateSql);
 
                     // Progress bar logic
