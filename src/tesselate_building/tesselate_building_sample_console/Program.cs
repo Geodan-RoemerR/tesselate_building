@@ -48,6 +48,13 @@ namespace tesselate_building_sample_console
                 conn.Open();
                 SqlMapper.AddTypeHandler(new GeometryTypeHandler());
 
+                // Make sure geometry column contains 1 type of geometry.
+                dynamic num_geometries = conn.QuerySingle($"select count(distinct st_geometrytype({o.InputGeometryColumn})) from {o.Table};");
+                if (num_geometries > 1)
+                {
+                    Console.WriteLine($@"Found more than 1 geometry type in column: {o.InputGeometryColumn}, make sure only 1 geometry type is present. 
+                                         Exiting program.");
+                }
 
                 // Query single geometry for determining type
                 var singularGeomSql = @$"select ST_AsEWKT({o.InputGeometryColumn}) as geometry, 
@@ -58,19 +65,19 @@ namespace tesselate_building_sample_console
 
                 // Determine correct geometry type.
                 InputGeometryType geomType;
-                if (singularGeom.dimensions == 3 && inputGeometry is MultiPolygon) // 3D MultiPolygon
+                if (singularGeom.dimensions == 3 && inputGeometry is MultiPolygon) // MultiPolygonZ
                 {
                     Console.WriteLine("Found 3D Multipolygon.");
                     geomType = InputGeometryType.MultiPolygonZ;
 
                 }
-                else if (singularGeom.dimensions == 3 && inputGeometry is PolyhedralSurface) // 3D PolyhedralSurface
+                else if (singularGeom.dimensions == 3 && inputGeometry is PolyhedralSurface) // PolyhedralSurfaceZ
                 {
                     Console.WriteLine("Found 3D PolyhedralSurface.");
                     geomType = InputGeometryType.PolyhedralSurfaceZ;
 
                 }
-                else if (singularGeom.dimensions == 2 && inputGeometry is Polygon) // 2D Polygon
+                else if (singularGeom.dimensions == 2 && inputGeometry is Polygon) // Polygon
                 {
                     Console.WriteLine("Found 2D Polygon, making sure they are valid...");
                     conn.Execute($"update {o.Table} set {o.InputGeometryColumn} = ST_MakeValid({o.InputGeometryColumn})");
@@ -87,7 +94,7 @@ namespace tesselate_building_sample_console
 
                 // Add output column
                 var outputGeometryColumn = o.InputGeometryColumn + "_3d_triangle";
-                Console.WriteLine($"Added output column.");
+                Console.WriteLine($"Adding output column.");
                 conn.Execute($"alter table {o.Table} drop column if exists {outputGeometryColumn} cascade");
                 conn.Execute($"alter table {o.Table} add column {outputGeometryColumn} geometry;");
 
