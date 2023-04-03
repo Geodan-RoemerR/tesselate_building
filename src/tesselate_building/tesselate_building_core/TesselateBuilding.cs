@@ -66,14 +66,20 @@ namespace tesselate_building_core
             return polygons;
         }
 
-        public static PolyhedralSurface ToPolyhedral(MultiPolygon multiPolygon) {
+        public static PolyhedralSurface ToPolyhedral(Geometry geometry) {
+
             var polyhedral = new PolyhedralSurface();
-            polyhedral.Dimension = Dimension.Xyz;
 
-            foreach(var polygon in multiPolygon.Geometries) {
-                polyhedral.Geometries.Add(polygon);
+            if(geometry is MultiPolygon)
+            {   
+                var multiPolygon = (MultiPolygon)geometry;
+                foreach(var polygon in multiPolygon.Geometries) {                   
+                    polyhedral.Dimension = Dimension.Xyz;
+                    polyhedral.Geometries.Add(polygon);
+                }
+
             }
-
+            
             // Triangulate polyhedralsurface
             var stream = new MemoryStream();
             polyhedral.Serialize<WkbSerializer>(stream);
@@ -83,5 +89,6 @@ namespace tesselate_building_core
 
             return polyhedralNew;
         }
+
     }
 }
