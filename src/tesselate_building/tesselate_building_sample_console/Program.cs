@@ -50,20 +50,41 @@ namespace tesselate_building_sample_console
 
                 // Make sure geometry column contains 1 type of geometry.
                 dynamic num_geometries = conn.QuerySingle($"select count(distinct st_geometrytype({o.InputGeometryColumn})) from {o.Table};");
-                if (num_geometries > 1)
+                if (Convert.ToInt32(num_geometries.Value) > 1)
                 {
                     Console.WriteLine($@"Found more than 1 geometry type in column: {o.InputGeometryColumn}, make sure only 1 geometry type is present. 
                                          Exiting program.");
                 }
 
-                // Query single geometry for determining type
+                // // Query single geometry for determining type
                 var singularGeomSql = @$"select ST_AsEWKT({o.InputGeometryColumn}) as geometry, 
                                             ST_NDims({o.InputGeometryColumn}) as dimensions, 
                                             {o.IdColumn} as id from {o.Table} LIMIT 1;";
                 dynamic singularGeom = conn.QuerySingle(singularGeomSql);
                 Geometry inputGeometry = Geometry.Deserialize<EwktSerializer>(singularGeom.geometry);
 
-                // Determine correct geometry type.
+                
+                
+                // Try prepared statement
+                // NpgsqlCommand command = new NpgsqlCommand(@$"select ST_AsEWKT(@inputgeometrycolumn) as geometry, 
+                //                             ST_NDims(@inputgeometrycolumn) as dimensions, 
+                //                             @idcolumn as id from {o.Table} LIMIT 1;", conn);
+
+                NpgsqlCommand command = new NpgsqlCommand(@$"select ST_AsEWKT(@inputgeometrycolumn) as geometry, 
+                                            ST_NDims(@inputgeometrycolumn) as dimensions, 
+                                            @idcolumn as id from {o.Table} LIMIT 1;", conn);
+                command.Parameters.Add(new NpgsqlParameter("@inputgeometrycolumn", NpgsqlTypes.NpgsqlDbType.Text));
+                command.Parameters[0].Value = o.InputGeometryColumn;
+                command.Parameters.Add(new NpgsqlParameter("@idcolumn", NpgsqlTypes.NpgsqlDbType.Text));
+                command.Parameters[1].Value = o.IdColumn;
+                command.Prepare();
+                command.ExecuteNonQuery();
+
+
+                // var result = command.ExecuteScalar();
+                // Console.WriteLine(command);
+
+                // Determine correct geometry type. 
                 InputGeometryType geomType;
                 if (singularGeom.dimensions == 3 && inputGeometry is MultiPolygon) // MultiPolygonZ
                 {
@@ -106,6 +127,9 @@ namespace tesselate_building_sample_console
 
                 Console.WriteLine("Tesselating geometries...");
 
+                var batch = new NpgsqlBatch(conn);
+
+
                 var i = 1;
                 foreach (var building in buildings)
                 {
@@ -141,13 +165,31 @@ namespace tesselate_building_sample_console
                     var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
                                         ST_Transform(ST_Force3D(St_SetSrid(ST_GeomFromText('{wkt}'), {inputGeometry.Srid})), {outputProjection}) 
                                         where {o.IdColumn}={building.Id};";
-                    conn.Execute(updateSql);
-
+                    // conn.Execute(updateSql);
+                    // Update table row
+                    // var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
+                    //                     ST_Transform(ST_Force3D(St_SetSrid(ST_GeomFromText('@wkt'), @srid)), @outputprojection) 
+                    //                     where @idcolumn=@buildingid;";
+                    // // conn.Execute(updateSql);
+                    var bcommand = new NpgsqlBatchCommand(updateSql);
+                    // bcommand.Parameters.AddWithValue("@wkt", wkt.ToString());
+                    // bcommand.Parameters.AddWithValue("@srid", inputGeometry.Srid);
+                    // bcommand.Parameters.AddWithValue("@outputprojection", outputProjection);
+                    // bcommand.Parameters.AddWithValue("@idcolumn", o.IdColumn);
+                    // bcommand.Parameters.AddWithValue("@buildingid", building.Id);
+                    batch.BatchCommands.Add(bcommand);
+                    
+                    
                     // Progress bar logic
                     var perc = Math.Round((double)i / buildings.AsList().Count * 100, 2);
                     Console.Write($"\rProgress: {perc.ToString("F")}%");
                     i++;
                 }
+
+                Console.WriteLine();
+                Console.WriteLine("Writing to database...");
+                batch.Prepare();
+                batch.ExecuteNonQuery();
 
                 // Add shaders
                 Console.WriteLine("");
