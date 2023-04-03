@@ -17,7 +17,7 @@ namespace tesselate_building_core
 
             polyhedral.Geometries.Add(GetPolygonZ(footprint, fromZ));
             polyhedral.Geometries.Add(GetPolygonZ(footprint, fromZ + height));
-           
+
             var walls = MakeWalls(footprint, fromZ, height - fromZ);
             polyhedral.Geometries.AddRange(walls);
 
@@ -25,7 +25,7 @@ namespace tesselate_building_core
             polyhedral.Serialize<WkbSerializer>(stream);
             var wkb = stream.ToArray();
             var triangulatedWkb = Triangulator.Triangulate(wkb);
-            var polyhedralNew = (PolyhedralSurface)Geometry.Deserialize<WkbSerializer>(triangulatedWkb);
+            var polyhedralNew = (PolyhedralSurface)Wkx.Geometry.Deserialize<WkbSerializer>(triangulatedWkb);
 
             return polyhedralNew;
         }
@@ -66,26 +66,28 @@ namespace tesselate_building_core
             return polygons;
         }
 
-        public static PolyhedralSurface ToPolyhedral(Geometry geometry) {
+        public static PolyhedralSurface ToPolyhedral(Wkx.Geometry geometry)
+        {
 
             var polyhedral = new PolyhedralSurface();
 
-            if(geometry is MultiPolygon)
-            {   
+            if (geometry is MultiPolygon)
+            {
                 var multiPolygon = (MultiPolygon)geometry;
-                foreach(var polygon in multiPolygon.Geometries) {                   
+                foreach (var polygon in multiPolygon.Geometries)
+                {
                     polyhedral.Dimension = Dimension.Xyz;
                     polyhedral.Geometries.Add(polygon);
                 }
 
             }
-            
+
             // Triangulate polyhedralsurface
             var stream = new MemoryStream();
             polyhedral.Serialize<WkbSerializer>(stream);
             var wkb = stream.ToArray();
             var triangulatedWkb = Triangulator.Triangulate(wkb);
-            var polyhedralNew = (PolyhedralSurface)Geometry.Deserialize<WkbSerializer>(triangulatedWkb);
+            var polyhedralNew = (PolyhedralSurface)Wkx.Geometry.Deserialize<WkbSerializer>(triangulatedWkb);
 
             return polyhedralNew;
         }

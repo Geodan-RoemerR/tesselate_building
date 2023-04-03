@@ -3,9 +3,7 @@ using System.Diagnostics;
 using System.Reflection;
 using CommandLine;
 using Dapper;
-using Npgsql;
 using tesselate_building_core;
-using tesselate_building_sample_console;
 using Wkx;
 
 public class Application
@@ -47,7 +45,7 @@ public class Application
                                         ST_NDims({o.InputGeometryColumn}) as dimensions, 
                                         {o.IdColumn} as id from {o.Table} LIMIT 1;";
             dynamic singularGeom = handler.QuerySingle(singularGeomSql);
-            Geometry inputGeometry = Geometry.Deserialize<EwktSerializer>(singularGeom.geometry);
+            Wkx.Geometry inputGeometry = Wkx.Geometry.Deserialize<EwktSerializer>(singularGeom.geometry);
 
 
             // Determine correct geometry type. 
@@ -90,13 +88,13 @@ public class Application
 
             // Create batch commmand
             handler.CreateBatch();
-            
+
             var i = 1;
             foreach (var building in buildings)
             {
 
                 // Convert geometry to traingulated polyhedralsurface
-                var polyhedral = converter.Convert(new PgGeometry(building.Geometry), building).Geometry;
+                var polyhedral = converter.Convert(new Geometry(building.Geometry), building).Geom;
 
                 // Geometry to wkt format
                 var wkt = polyhedral.SerializeString<WktSerializer>();

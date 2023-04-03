@@ -3,12 +3,12 @@ using tesselate_building_core;
 using Wkx;
 
 public class MultiPolygonConverter : Converter
+{
+    public override Geometry Convert(Geometry geometry, Building building)
     {
-        public override PgGeometry Convert(PgGeometry geometry, Building building)
-        {
-            MultiPolygon multiPolygon = (MultiPolygon)geometry.Geometry;
-            var polyhedral = TesselateBuilding.ToPolyhedral(multiPolygon);
-            
-            return new PgGeometry(polyhedral);
-        }
+        MultiPolygon multiPolygon = (MultiPolygon)geometry.Geom;
+        var polyhedral = TesselateBuilding.ToPolyhedral(multiPolygon);
+
+        return new Geometry(polyhedral);
     }
+}
