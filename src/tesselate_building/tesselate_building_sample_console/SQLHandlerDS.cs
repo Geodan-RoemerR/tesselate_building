@@ -4,7 +4,7 @@ using Dapper;
 using Npgsql;
 using tesselate_building_sample_console;
 
-public class SQLHandler
+public class SQLHandlerDC
 {
 
     private string connectionString { get; set; }
@@ -23,9 +23,11 @@ public class SQLHandler
 
     public NpgsqlConnection conn { get; set; }
 
-    public NpgsqlBatch batch {get; set;}
+    public NpgsqlDataSource dc { get; set; }
 
-    public SQLHandler(string user, string port, string host, string database, string table)
+    public NpgsqlBatch batch { get; set; }
+
+    public SQLHandlerDC(string user, string port, string host, string database, string table)
     {
         this.user = user;
         this.port = port;
@@ -36,7 +38,7 @@ public class SQLHandler
 
     public void Connect()
     {
-        this.connectionString = $"Host={this.host};Username={this.user};Database={this.database};Port={this.port};CommandTimeOut=300;Write Buffer Size=12000; Read Buffer Size=12000";
+        this.connectionString = $"Host={this.host};Username={this.user};Database={this.database};Port={this.port};CommandTimeOut=300";
 
         var istrusted = TrustedConnectionChecker.HasTrustedConnection(this.connectionString);
 
@@ -48,19 +50,19 @@ public class SQLHandler
             Console.WriteLine();
         }
 
-        this.conn = new NpgsqlConnection(this.connectionString);
-        this.Open();
+        this.dc = NpgsqlDataSource.Create(this.connectionString);
+
+        // this.conn = new NpgsqlConnection(this.connectionString);
+        // this.Open();
         SqlMapper.AddTypeHandler(new GeometryTypeHandler());
     }
 
     public void ExecuteNonQuery(string sql, params object[] parameters)
     {
-        NpgsqlCommand command;
+        NpgsqlCommand command = this.dc.CreateCommand(sql);
 
         if (parameters.Length > 0)
         {
-            command = new NpgsqlCommand(sql, this.conn);
-
             foreach (var param in parameters)
             {
                 command.Parameters.AddWithValue(param);
@@ -68,21 +70,20 @@ public class SQLHandler
 
             command.Prepare();
         }
-        else
-        {
-            command = new NpgsqlCommand(sql, this.conn);
-        }
 
         command.ExecuteNonQuery();
     }
 
     public dynamic QuerySingle(string sql)
     {
-        return this.conn.QuerySingle(sql);
+        NpgsqlCommand command = this.dc.CreateCommand(sql);
+        return command.ExecuteScalar();;
     }
 
     public IEnumerable<T> Query<T>(string sql) where T : new ()
     {
+        NpgsqlCommand command = this.dc.CreateCommand(sql);
+        // command.
         return this.conn.Query<T>(sql);
     }
 

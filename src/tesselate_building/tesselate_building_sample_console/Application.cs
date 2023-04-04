@@ -8,6 +8,7 @@ using Wkx;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Builder;
 using Npgsql;
+using System.IO;
 
 public class Application
 {
@@ -18,18 +19,18 @@ public class Application
     public static void run(ParserResult<tesselate_building_sample_console.Options> parser)
     {
         
-        var builder = WebApplication.CreateBuilder();
-        // var logger = LoggerFactory.Create(config =>
-        // {
-        //     config.AddConsole();
-        // }).CreateLogger("Application");
-        builder.Logging.AddConsole();
+        // var builder = WebApplication.CreateBuilder();
+        // // var logger = LoggerFactory.Create(config =>
+        // // {
+        // //     config.AddConsole();
+        // // }).CreateLogger("Application");
+        // builder.Logging.AddConsole();
 
         // var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
         // NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory);
 
-        var app = builder.Build();
-        app.Logger.LogInformation("hello world");
+        // var app = builder.Build();
+        // app.Logger.LogInformation("hello world");
 
 
         // Some tooling 
@@ -119,15 +120,32 @@ public class Application
 
                 // Convert geometry to traingulated polyhedralsurface
                 var polyhedral = converter.Convert(new Geometry(building.Geometry), building).Geom;
-
+            
                 // Geometry to wkt format
                 var wkt = polyhedral.SerializeString<WktSerializer>();
 
+                // var stream = new MemoryStream();
+                // polyhedral.Serialize<WkbSerializer>(stream);
+                // var wkb = stream.ToArray();
+
                 // Update table row sql
                 var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
-                                    ST_Transform(ST_Force3D(St_SetSrid(ST_GeomFromText('{wkt}'), $1)), $2) 
-                                    where {o.IdColumn}=$3;";
-                handler.AddBatchCommand(updateSql, inputGeometry.Srid, outputProjection, Convert.ToInt32(building.Id));
+                                    ST_Transform(
+                                            ST_Force3D(
+                                                St_SetSrid(
+                                                    ST_GeomFromText('{wkt}'), 
+                                                {inputGeometry.Srid})
+                                            ), 
+                                    {outputProjection}) 
+                                    where {o.IdColumn}={building.Id};";
+                // NpgsqlCommand command = new NpgsqlCommand(updateSql, handler.conn);
+                // command.Parameters.AddWithValue(inputGeometry.Srid);
+                // command.Parameters.AddWithValue(outputProjection);
+                // command.Parameters.AddWithValue(Convert.ToInt32(building.Id));
+                // command.Prepare();
+                // command.ExecuteNonQuery();
+                handler.conn.Execute(updateSql);
+                // handler.AddBatchCommand(updateSql, Convert.ToInt32(building.Id));
 
                 // Progress bar logic
                 var perc = Math.Round((double)i / buildings.AsList().Count * 100, 2);
@@ -138,8 +156,8 @@ public class Application
             // Execute batched query
             Console.WriteLine();
             Console.WriteLine("Writing to database...");
-            handler.batch.Prepare();
-            handler.batch.ExecuteNonQuery();
+            // handler.batch.Prepare();
+            // handler.batch.ExecuteNonQuery();
             // handler.ExecuteBatchCommand();
 
             // Add shaders
