@@ -32,7 +32,7 @@ namespace tesselate_building_sample_console
                 o.Database = string.IsNullOrEmpty(o.Database) ? Environment.UserName : o.Database;
 
                 var outputProjection = 4978;
-                // (o.Format == "mapbox" ? 3857 : 4978);
+
                 var connectionString = $"Host={o.Host};Username={o.User};Database={o.Database};Port={o.Port}";
 
                 var istrusted = TrustedConnectionChecker.HasTrustedConnection(connectionString);
@@ -62,27 +62,6 @@ namespace tesselate_building_sample_console
                                             {o.IdColumn} as id from {o.Table} LIMIT 1;";
                 dynamic singularGeom = conn.QuerySingle(singularGeomSql);
                 Geometry inputGeometry = Geometry.Deserialize<EwktSerializer>(singularGeom.geometry);
-
-                
-                
-                // Try prepared statement
-                // NpgsqlCommand command = new NpgsqlCommand(@$"select ST_AsEWKT(@inputgeometrycolumn) as geometry, 
-                //                             ST_NDims(@inputgeometrycolumn) as dimensions, 
-                //                             @idcolumn as id from {o.Table} LIMIT 1;", conn);
-
-                NpgsqlCommand command = new NpgsqlCommand(@$"select ST_AsEWKT(@inputgeometrycolumn) as geometry, 
-                                            ST_NDims(@inputgeometrycolumn) as dimensions, 
-                                            @idcolumn as id from {o.Table} LIMIT 1;", conn);
-                command.Parameters.Add(new NpgsqlParameter("@inputgeometrycolumn", NpgsqlTypes.NpgsqlDbType.Text));
-                command.Parameters[0].Value = o.InputGeometryColumn;
-                command.Parameters.Add(new NpgsqlParameter("@idcolumn", NpgsqlTypes.NpgsqlDbType.Text));
-                command.Parameters[1].Value = o.IdColumn;
-                command.Prepare();
-                command.ExecuteNonQuery();
-
-
-                // var result = command.ExecuteScalar();
-                // Console.WriteLine(command);
 
                 // Determine correct geometry type. 
                 InputGeometryType geomType;
@@ -165,18 +144,7 @@ namespace tesselate_building_sample_console
                     var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
                                         ST_Transform(ST_Force3D(St_SetSrid(ST_GeomFromText('{wkt}'), {inputGeometry.Srid})), {outputProjection}) 
                                         where {o.IdColumn}={building.Id};";
-                    // conn.Execute(updateSql);
-                    // Update table row
-                    // var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
-                    //                     ST_Transform(ST_Force3D(St_SetSrid(ST_GeomFromText('@wkt'), @srid)), @outputprojection) 
-                    //                     where @idcolumn=@buildingid;";
-                    // // conn.Execute(updateSql);
                     var bcommand = new NpgsqlBatchCommand(updateSql);
-                    // bcommand.Parameters.AddWithValue("@wkt", wkt.ToString());
-                    // bcommand.Parameters.AddWithValue("@srid", inputGeometry.Srid);
-                    // bcommand.Parameters.AddWithValue("@outputprojection", outputProjection);
-                    // bcommand.Parameters.AddWithValue("@idcolumn", o.IdColumn);
-                    // bcommand.Parameters.AddWithValue("@buildingid", building.Id);
                     batch.BatchCommands.Add(bcommand);
                     
                     
