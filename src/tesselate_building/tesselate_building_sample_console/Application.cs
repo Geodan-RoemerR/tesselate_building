@@ -49,11 +49,14 @@ public class Application
             handler.Connect();
 
             // Make sure geometry column contains 1 type of geometry. // TODO CHANGE TO Scalar 
-            dynamic numGeometryTypes = handler.QuerySingle($"select count(distinct st_geometrytype({o.InputGeometryColumn})) from {o.Table};");
+            dynamic numGeometryTypes = handler.QuerySingle(
+                $"select count(distinct st_geometrytype({o.InputGeometryColumn})) from {o.Table};"
+                );
+
             if (Convert.ToInt32(numGeometryTypes.Count) > 1)
             {
-                Console.WriteLine($@"Found more than 1 geometry type in column: {o.InputGeometryColumn}, make sure only 1 geometry type is present. 
-                                        Exiting program.");
+                Console.WriteLine($@"Found more than 1 geometry type in column: {o.InputGeometryColumn}, 
+                                    make sure only 1 geometry type is present. Exiting program.");
             }
 
 
@@ -80,12 +83,15 @@ public class Application
             else if (singularGeom.dimensions == 2 && inputGeometry is Polygon) // Polygon
             {
                 Console.WriteLine("Found 2D Polygon, making sure they are valid...");
-                handler.ExecuteNonQuery($"update {o.Table} set {o.InputGeometryColumn} = ST_MakeValid({o.InputGeometryColumn})");
+                handler.ExecuteNonQuery(@$"update {o.Table} set {o.InputGeometryColumn} = 
+                                        ST_MakeValid({o.InputGeometryColumn})"
+                                        );
                 converter = new PolygonConverter();
             }
             else
             {
-                Console.WriteLine($"No Polygon, MultiPolygonZ or PolyhedralSurfaceZ geometry found in column: {o.InputGeometryColumn}, exiting program.");
+                Console.WriteLine(@$"No Polygon, MultiPolygonZ or PolyhedralSurfaceZ geometry found in column: 
+                                    {o.InputGeometryColumn}, exiting program.");
                 converter = null;
                 Environment.Exit(0);
             };
@@ -99,7 +105,8 @@ public class Application
 
             // Query geometries
             var heightSql = (singularGeom is Polygon ? $"{o.HeightColumn} as height, " : "");
-            var completeGeomSql = $"select ST_AsBinary({o.InputGeometryColumn}) as geometry, {heightSql}{o.IdColumn} as id from {o.Table}";
+            var completeGeomSql = @$"select ST_AsBinary({o.InputGeometryColumn}) as geometry, 
+                                     {heightSql}{o.IdColumn} as id from {o.Table}";
             var buildings = handler.Query<Building>(completeGeomSql);
             Console.WriteLine("Tesselating geometries...");
 

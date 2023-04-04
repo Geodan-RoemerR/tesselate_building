@@ -105,10 +105,10 @@ public class SQLHandler
         
     }
 
-    // public void ExecuteBatchCommand() {
-    //     this.batch.Prepare();
-    //     this.batch.ExecuteNonQuery();
-    // }
+    public void ExecuteBatchCommand() {
+        this.batch.Prepare();
+        this.batch.ExecuteNonQuery();
+    }
 
     public void Open()
     {
