@@ -5,6 +5,9 @@ using CommandLine;
 using Dapper;
 using tesselate_building_core;
 using Wkx;
+using Microsoft.Extensions.Logging;
+using Microsoft.AspNetCore.Builder;
+using Npgsql;
 
 public class Application
 {
@@ -14,6 +17,20 @@ public class Application
 
     public static void run(ParserResult<tesselate_building_sample_console.Options> parser)
     {
+        
+        var builder = WebApplication.CreateBuilder();
+        // var logger = LoggerFactory.Create(config =>
+        // {
+        //     config.AddConsole();
+        // }).CreateLogger("Application");
+        builder.Logging.AddConsole();
+
+        // var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
+        // NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory);
+
+        var app = builder.Build();
+        app.Logger.LogInformation("hello world");
+
 
         // Some tooling 
         var version = Assembly.GetEntryAssembly().GetName().Version;
@@ -114,7 +131,9 @@ public class Application
             // Execute batched query
             Console.WriteLine();
             Console.WriteLine("Writing to database...");
-            handler.ExecuteBatchCommand();
+            handler.batch.Prepare();
+            handler.batch.ExecuteNonQuery();
+            // handler.ExecuteBatchCommand();
 
             // Add shaders
             Console.WriteLine("Adding shaders...");

@@ -23,7 +23,7 @@ public class SQLHandler
 
     private NpgsqlConnection conn { get; set; }
 
-    private NpgsqlBatch batch {get; set;}
+    public NpgsqlBatch batch {get; set;}
 
     public SQLHandler(string user, string port, string host, string database, string table)
     {
@@ -49,7 +49,7 @@ public class SQLHandler
         }
 
         this.conn = new NpgsqlConnection(this.connectionString);
-        Open();
+        this.Open();
         SqlMapper.AddTypeHandler(new GeometryTypeHandler());
     }
 
@@ -91,31 +91,24 @@ public class SQLHandler
     }
 
     public void AddBatchCommand(string sql, params object[] parameters) {
-        NpgsqlBatchCommand command;
+        NpgsqlBatchCommand command = new NpgsqlBatchCommand(sql);
         
         if (parameters.Length > 0)
         {
-            command = new NpgsqlBatchCommand(sql);
-
             foreach (var param in parameters)
             {
                 command.Parameters.AddWithValue(param);
             }
-
-        }
-        else
-        {
-            command = new NpgsqlBatchCommand(sql);
         }
 
         this.batch.BatchCommands.Add(command);
         
     }
 
-    public void ExecuteBatchCommand() {
-        this.batch.Prepare();
-        this.batch.ExecuteNonQuery();
-    }
+    // public void ExecuteBatchCommand() {
+    //     this.batch.Prepare();
+    //     this.batch.ExecuteNonQuery();
+    // }
 
     public void Open()
     {
