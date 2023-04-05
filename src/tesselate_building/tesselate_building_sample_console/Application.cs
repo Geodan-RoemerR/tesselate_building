@@ -9,6 +9,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Builder;
 using Npgsql;
 using System.IO;
+using System.Text;
 
 public class Application
 {
@@ -19,23 +20,14 @@ public class Application
     public static void run(ParserResult<tesselate_building_sample_console.Options> parser)
     {
         
-        // var builder = WebApplication.CreateBuilder();
-        // // var logger = LoggerFactory.Create(config =>
-        // // {
-        // //     config.AddConsole();
-        // // }).CreateLogger("Application");
-        // builder.Logging.AddConsole();
-
-        // var loggerFactory = LoggerFactory.Create(builder => builder.AddConsole());
-        // NpgsqlLoggingConfiguration.InitializeLogging(loggerFactory);
-
-        // var app = builder.Build();
-        // app.Logger.LogInformation("hello world");
-
+        // Logging logic
+        var builder = WebApplication.CreateBuilder();
+        builder.Logging.AddConsole();
+        var app = builder.Build();
 
         // Some tooling 
         var version = Assembly.GetEntryAssembly().GetName().Version;
-        Console.WriteLine($"Tool: Tesselate buildings {version}");
+        app.Logger.LogInformation($"Tool: Tesselate buildings {version}");
         var stopWatch = new Stopwatch();
         stopWatch.Start();
 
@@ -56,7 +48,7 @@ public class Application
 
             if (Convert.ToInt32(numGeometryTypes.Count) > 1)
             {
-                Console.WriteLine($@"Found more than 1 geometry type in column: {o.InputGeometryColumn}, 
+                app.Logger.LogError($@"Found more than 1 geometry type in column: {o.InputGeometryColumn}, 
                                     make sure only 1 geometry type is present. Exiting program.");
             }
 
@@ -73,17 +65,17 @@ public class Application
             Converter converter;
             if (singularGeom.dimensions == 3 && inputGeometry is MultiPolygon) // MultiPolygonZ
             {
-                Console.WriteLine("Found 3D Multipolygon.");
+                app.Logger.LogInformation("Found 3D Multipolygon.");
                 converter = new MultiPolygonConverter();
             }
             else if (singularGeom.dimensions == 3 && inputGeometry is PolyhedralSurface) // PolyhedralSurfaceZ
             {
-                Console.WriteLine("Found 3D PolyhedralSurface.");
+                app.Logger.LogInformation("Found 3D PolyhedralSurface.");
                 converter = new PolyhedralConverter();
             }
             else if (singularGeom.dimensions == 2 && inputGeometry is Polygon) // Polygon
             {
-                Console.WriteLine("Found 2D Polygon, making sure they are valid...");
+                app.Logger.LogInformation("Found 2D Polygon, making sure they are valid...");
                 handler.ExecuteNonQuery(@$"update {o.Table} set {o.InputGeometryColumn} = 
                                         ST_MakeValid({o.InputGeometryColumn})"
                                         );
@@ -91,7 +83,7 @@ public class Application
             }
             else
             {
-                Console.WriteLine(@$"No Polygon, MultiPolygonZ or PolyhedralSurfaceZ geometry found in column: 
+                app.Logger.LogError(@$"No Polygon, MultiPolygonZ or PolyhedralSurfaceZ geometry found in column: 
                                     {o.InputGeometryColumn}, exiting program.");
                 converter = null;
                 Environment.Exit(0);
@@ -100,20 +92,19 @@ public class Application
 
             // Add output column
             var outputGeometryColumn = o.InputGeometryColumn + "_3d_triangle";
-            Console.WriteLine($"Adding output column.");
+            app.Logger.LogInformation($"Adding output column.");
             handler.ExecuteNonQuery($"alter table {o.Table} drop column if exists {outputGeometryColumn} cascade");
             handler.ExecuteNonQuery($"alter table {o.Table} add column {outputGeometryColumn} geometry;");
 
             // Query geometries
             var heightSql = (singularGeom is Polygon ? $"{o.HeightColumn} as height, " : "");
             var completeGeomSql = @$"select ST_AsBinary({o.InputGeometryColumn}) as geometry, 
-                                     {heightSql}{o.IdColumn} as id from {o.Table}";
+                                     {heightSql}{o.IdColumn} as id from {o.Table} ORDER BY {o.IdColumn}";
             var buildings = handler.Query<Building>(completeGeomSql);
-            Console.WriteLine("Tesselating geometries...");
+            app.Logger.LogInformation("Tesselating geometries...");
 
             // Create batch commmand
             handler.CreateBatch();
-
             var i = 1;
             foreach (var building in buildings)
             {
@@ -124,10 +115,6 @@ public class Application
                 // Geometry to wkt format
                 var wkt = polyhedral.SerializeString<WktSerializer>();
 
-                // var stream = new MemoryStream();
-                // polyhedral.Serialize<WkbSerializer>(stream);
-                // var wkb = stream.ToArray();
-
                 // Update table row sql
                 var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
                                     ST_Transform(
@@ -137,15 +124,8 @@ public class Application
                                                 {inputGeometry.Srid})
                                             ), 
                                     {outputProjection}) 
-                                    where {o.IdColumn}={building.Id};";
-                // NpgsqlCommand command = new NpgsqlCommand(updateSql, handler.conn);
-                // command.Parameters.AddWithValue(inputGeometry.Srid);
-                // command.Parameters.AddWithValue(outputProjection);
-                // command.Parameters.AddWithValue(Convert.ToInt32(building.Id));
-                // command.Prepare();
-                // command.ExecuteNonQuery();
-                handler.conn.Execute(updateSql);
-                // handler.AddBatchCommand(updateSql, Convert.ToInt32(building.Id));
+                                    where {o.IdColumn}=$1;";
+                handler.AddBatchCommand(updateSql, Convert.ToInt32(building.Id));
 
                 // Progress bar logic
                 var perc = Math.Round((double)i / buildings.AsList().Count * 100, 2);
@@ -155,13 +135,13 @@ public class Application
 
             // Execute batched query
             Console.WriteLine();
-            Console.WriteLine("Writing to database...");
-            // handler.batch.Prepare();
-            // handler.batch.ExecuteNonQuery();
-            // handler.ExecuteBatchCommand();
+            app.Logger.LogInformation("Writing to database...");
+
+            handler.batch.ExecuteNonQuery();
+
 
             // Add shaders
-            Console.WriteLine("Adding shaders...");
+            app.Logger.LogInformation("Adding shaders...");
             handler.ExecuteNonQuery($"alter table {o.Table} drop column if exists {outputGeometryColumn}_shader cascade;");
             handler.ExecuteNonQuery($"alter table {o.Table} add {outputGeometryColumn}_shader jsonb;");
 
@@ -192,8 +172,8 @@ public class Application
 
             stopWatch.Stop();
             Console.WriteLine();
-            Console.WriteLine($"Elapsed: {stopWatch.ElapsedMilliseconds / 1000} seconds");
-            Console.WriteLine("Program finished.");
+            app.Logger.LogInformation($"Elapsed: {stopWatch.ElapsedMilliseconds / 1000} seconds");
+            app.Logger.LogInformation("Program finished.");
         });
     }
 }

@@ -36,7 +36,7 @@ public class SQLHandler
 
     public void Connect()
     {
-        this.connectionString = $"Host={this.host};Username={this.user};Database={this.database};Port={this.port};CommandTimeOut=300;Write Buffer Size=12000; Read Buffer Size=12000";
+        this.connectionString = $"Host={this.host};Username={this.user};Database={this.database};Port={this.port};Write Buffer Size=12000; Read Buffer Size=12000";
 
         var istrusted = TrustedConnectionChecker.HasTrustedConnection(this.connectionString);
 
