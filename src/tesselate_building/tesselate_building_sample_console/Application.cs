@@ -92,19 +92,20 @@ public class Application
 
             // Add output column
             var outputGeometryColumn = o.InputGeometryColumn + "_3d_triangle";
-            app.Logger.LogInformation($"Adding output column.");
+            app.Logger.LogInformation($"Adding output column...");
             handler.ExecuteNonQuery($"alter table {o.Table} drop column if exists {outputGeometryColumn} cascade");
             handler.ExecuteNonQuery($"alter table {o.Table} add column {outputGeometryColumn} geometry;");
 
             // Query geometries
+            app.Logger.LogInformation("Querying geometries...");
             var heightSql = (singularGeom is Polygon ? $"{o.HeightColumn} as height, " : "");
             var completeGeomSql = @$"select ST_AsBinary({o.InputGeometryColumn}) as geometry, 
-                                     {heightSql}{o.IdColumn} as id from {o.Table} ORDER BY {o.IdColumn}";
+                                     {heightSql}{o.IdColumn} as id from {o.Table}";
             var buildings = handler.Query<Building>(completeGeomSql);
-            app.Logger.LogInformation("Tesselating geometries...");
 
             // Create batch commmand
             handler.CreateBatch();
+            app.Logger.LogInformation("Tesselating geometries...");
             var i = 1;
             foreach (var building in buildings)
             {
@@ -128,30 +129,29 @@ public class Application
                 handler.AddBatchCommand(updateSql, Convert.ToInt32(building.Id));
 
                 // Progress bar logic
-                var perc = Math.Round((double)i / buildings.AsList().Count * 100, 2);
-                Console.Write($"\rProgress: {perc.ToString("F")}%");
+                var perc = Math.Round((double)i / buildings.AsList().Count, 2);
+                app.Logger.LogInformation($"\rProgress: {perc.ToString("F")}%");
                 i++;
             }
 
             // Execute batched query
             Console.WriteLine();
             app.Logger.LogInformation("Writing to database...");
-
             handler.batch.ExecuteNonQuery();
 
 
-            // Add shaders
-            app.Logger.LogInformation("Adding shaders...");
-            handler.ExecuteNonQuery($"alter table {o.Table} drop column if exists {outputGeometryColumn}_shader cascade;");
-            handler.ExecuteNonQuery($"alter table {o.Table} add {outputGeometryColumn}_shader jsonb;");
+            // // Add shaders
+            // app.Logger.LogInformation("Adding shaders...");
+            // handler.ExecuteNonQuery($"alter table {o.Table} drop column if exists {outputGeometryColumn}_shader cascade;");
+            // handler.ExecuteNonQuery($"alter table {o.Table} add {outputGeometryColumn}_shader jsonb;");
 
-            var styleSql = @$"    
-                update {o.Table} set {outputGeometryColumn}_shader = jsonb_build_object(	
-                    'PbrMetallicRoughness', jsonb_build_object(
-                        'BaseColors'::text, array_fill('@color'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})]), 
-                    'MetallicRoughness'::text, array_fill('#008000'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})])));
-            ";
-            handler.ExecuteNonQuery(styleSql, o.Color);
+            // var styleSql = @$"    
+            //     update {o.Table} set {outputGeometryColumn}_shader = jsonb_build_object(	
+            //         'PbrMetallicRoughness', jsonb_build_object(
+            //             'BaseColors'::text, array_fill('@color'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})]), 
+            //         'MetallicRoughness'::text, array_fill('#008000'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})])));
+            // ";
+            // handler.ExecuteNonQuery(styleSql, o.Color);
 
             // Filter out wrongly tesselated buildings.
             string deleteSql = @$"
