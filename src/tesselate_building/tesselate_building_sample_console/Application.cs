@@ -7,15 +7,15 @@ using tesselate_building_core;
 using Wkx;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Builder;
-using Npgsql;
-using System.IO;
-using System.Text;
+using System.Collections.Generic;
 
 public class Application
 {
 
     static string password = string.Empty;
     static int outputProjection = 4978;
+
+    static string idColumn = "auto_inc_id";
 
     public static void run(ParserResult<tesselate_building_sample_console.Options> parser)
     {
@@ -36,15 +36,32 @@ public class Application
             // Retrieve username and database from env if not given.
             o.User = string.IsNullOrEmpty(o.User) ? Environment.UserName : o.User;
             o.Database = string.IsNullOrEmpty(o.Database) ? Environment.UserName : o.Database;
-
             // Create connection with database
             SQLHandler handler = new SQLHandler(o.User, o.Port, o.Host, o.Database, o.Table);
             handler.Connect();
+            
+            dynamic rowCountDapper = handler.QuerySingle($"select count(*) from {o.Table}");
+            var rowCount = Convert.ToDouble(rowCountDapper.count);
 
-            // Make sure geometry column contains 1 type of geometry. // TODO CHANGE TO Scalar 
+            // Retrieve and save current primary key
+            var pkeySql = @$"SELECT a.attname FROM   pg_index i JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) 
+                                                                WHERE  i.indrelid = '{o.Table}'::regclass AND i.indisprimary;";
+            var primaryKey = Convert.ToString(handler.QuerySingle(pkeySql).attname);
+            
+            // Remove primary key constraint and set it to auto increment table
+            var pkConstraint = o.Table.Substring(o.Table.LastIndexOf('.') + 1) + "_pkey";
+            app.Logger.LogInformation("Adding auto increment primary key for performance purpuses.");
+            handler.CreateBatch();
+            handler.AddBatchCommand($"alter table {o.Table} drop column if exists {idColumn} cascade");
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP CONSTRAINT {pkConstraint}");
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} ADD COLUMN {idColumn} SERIAL PRIMARY KEY;");
+            handler.ExecuteBatchCommand();
+ 
+
+            // Make sure geometry column contains 1 type of geometry. 
             dynamic numGeometryTypes = handler.QuerySingle(
                 $"select count(distinct st_geometrytype({o.InputGeometryColumn})) from {o.Table};"
-                );
+            );
 
             if (Convert.ToInt32(numGeometryTypes.Count) > 1)
             {
@@ -52,12 +69,13 @@ public class Application
                                     make sure only 1 geometry type is present. Exiting program.");
             }
 
-
             // // Query single geometry for determining type
             var singularGeomSql = @$"select ST_AsEWKT({o.InputGeometryColumn}) as geometry, 
                                         ST_NDims({o.InputGeometryColumn}) as dimensions, 
-                                        {o.IdColumn} as id from {o.Table} LIMIT 1;";
+                                        {idColumn} as id from {o.Table} LIMIT 1;";
             dynamic singularGeom = handler.QuerySingle(singularGeomSql);
+            
+            
             Wkx.Geometry inputGeometry = Wkx.Geometry.Deserialize<EwktSerializer>(singularGeom.geometry);
 
 
@@ -100,58 +118,69 @@ public class Application
             app.Logger.LogInformation("Querying geometries...");
             var heightSql = (singularGeom is Polygon ? $"{o.HeightColumn} as height, " : "");
             var completeGeomSql = @$"select ST_AsBinary({o.InputGeometryColumn}) as geometry, 
-                                     {heightSql}{o.IdColumn} as id from {o.Table}";
-            var buildings = handler.Query<Building>(completeGeomSql);
+                                     {heightSql}{idColumn} as id from {o.Table} ORDER BY gid";
 
-            // Create batch commmand
-            handler.CreateBatch();
-            app.Logger.LogInformation("Tesselating geometries...");
-            var i = 1;
-            foreach (var building in buildings)
-            {
 
-                // Convert geometry to traingulated polyhedralsurface
-                var polyhedral = converter.Convert(new Geometry(building.Geometry), building).Geom;
-            
-                // Geometry to wkt format
-                var wkt = polyhedral.SerializeString<WktSerializer>();
+            app.Logger.LogInformation($"Num geometries to tesselate: {rowCount}");
+            var chunk = 1000;
+            var offset = 0;
+            var k = 0;
+            while(k < Convert.ToInt32(rowCount)) {
+                
+                var stopWatch = new Stopwatch();
+                stopWatch.Start();
+                
+                var sql = @$"select ST_AsBinary({o.InputGeometryColumn}) as geometry, 
+                            {heightSql}{idColumn} as id from {o.Table} WHERE {idColumn} IN (
+                                SELECT {idColumn} FROM {o.Table} WHERE {idColumn} >= {offset} and {idColumn} < {offset + chunk}
+                            )";
+                
+                var reader = handler.ExecuteDataReader(sql);
+                var parser = reader.GetRowParser<Building>(typeof(Building));
+                handler.CreateBatch();
+                while (reader.Read()) 
+                {   
+                    var building = parser(reader);
 
-                // Update table row sql
-                var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
-                                    ST_Transform(
-                                            ST_Force3D(
-                                                St_SetSrid(
-                                                    ST_GeomFromText('{wkt}'), 
-                                                {inputGeometry.Srid})
-                                            ), 
-                                    {outputProjection}) 
-                                    where {o.IdColumn}=$1;";
-                handler.AddBatchCommand(updateSql, Convert.ToInt32(building.Id));
+                    // Convert geometry to traingulated polyhedralsurface
+                    var polyhedral = converter.Convert(new Geometry(building.Geometry), building).Geom;
+                
+                    // Geometry to wkt format
+                    var wkt = polyhedral.SerializeString<WktSerializer>();
 
-                // Progress bar logic
-                var perc = Math.Round((double)i / buildings.AsList().Count, 2);
-                app.Logger.LogInformation($"\rProgress: {perc.ToString("F")}%");
-                i++;
+                    // Update table row sql
+                    var updateSql = $@"update {o.Table} set {outputGeometryColumn} = 
+                                        ST_Transform(
+                                                ST_Force3D(
+                                                    St_SetSrid(
+                                                        ST_GeomFromText('{wkt}'), 
+                                                    {inputGeometry.Srid})
+                                                ), 
+                                        {outputProjection}) 
+                                        where {idColumn}=$1;";
+                    handler.AddBatchCommand(updateSql, Convert.ToInt32(building.Id));
+                    k++;
+                }
+                reader.Close();
+                handler.batch.ExecuteNonQuery();    
+                stopWatch.Stop();
+                app.Logger.LogInformation($"Time spent: {stopWatch.ElapsedMilliseconds / 1000} sec");
+                offset += chunk;
+                app.Logger.LogInformation($"Tesselated and inserted {offset}/{rowCount} geometries.");
             }
 
-            // Execute batched query
-            Console.WriteLine();
-            app.Logger.LogInformation("Writing to database...");
-            handler.batch.ExecuteNonQuery();
+            // Add shaders
+            app.Logger.LogInformation("Adding shaders...");
+            handler.ExecuteNonQuery($"alter table {o.Table} drop column if exists {outputGeometryColumn}_shader cascade;");
+            handler.ExecuteNonQuery($"alter table {o.Table} add {outputGeometryColumn}_shader jsonb;");
 
-
-            // // Add shaders
-            // app.Logger.LogInformation("Adding shaders...");
-            // handler.ExecuteNonQuery($"alter table {o.Table} drop column if exists {outputGeometryColumn}_shader cascade;");
-            // handler.ExecuteNonQuery($"alter table {o.Table} add {outputGeometryColumn}_shader jsonb;");
-
-            // var styleSql = @$"    
-            //     update {o.Table} set {outputGeometryColumn}_shader = jsonb_build_object(	
-            //         'PbrMetallicRoughness', jsonb_build_object(
-            //             'BaseColors'::text, array_fill('@color'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})]), 
-            //         'MetallicRoughness'::text, array_fill('#008000'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})])));
-            // ";
-            // handler.ExecuteNonQuery(styleSql, o.Color);
+            var styleSql = @$"    
+                update {o.Table} set {outputGeometryColumn}_shader = jsonb_build_object(	
+                    'PbrMetallicRoughness', jsonb_build_object(
+                        'BaseColors'::text, array_fill('{o.Color}'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})]), 
+                    'MetallicRoughness'::text, array_fill('#008000'::text, ARRAY[ST_NumGeometries({outputGeometryColumn})])));
+            ";
+            handler.ExecuteNonQuery(styleSql);
 
             // Filter out wrongly tesselated buildings.
             string deleteSql = @$"
@@ -166,6 +195,13 @@ public class Application
             // Create index on triangulated geometry column
             var indexSql = $"create index on {o.Table} using gist(st_centroid(st_envelope({outputGeometryColumn})));";
             handler.ExecuteNonQuery(indexSql);
+
+            // Reset primary key
+            handler.CreateBatch();
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP CONSTRAINT {pkConstraint}");
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} ADD PIMRARY KEY ({primaryKey})");
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP COLUMN {idColumn} CASCADE");
+            handler.ExecuteBatchCommand();
 
             // Close connection
             handler.Close();

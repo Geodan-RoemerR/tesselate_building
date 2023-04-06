@@ -80,6 +80,23 @@ public class SQLHandler
         command.ExecuteNonQuery();
     }
 
+    public NpgsqlDataReader ExecuteDataReader(string sql, params object[] parameters) 
+    {
+        NpgsqlCommand command = new NpgsqlCommand(sql, this.conn);
+
+        if (parameters.Length > 0)
+        {
+            foreach (var param in parameters)
+            {
+                command.Parameters.AddWithValue(param);
+                command.Prepare();
+            }
+        }
+ 
+
+        return command.ExecuteReader();
+    }
+
     public dynamic QuerySingle(string sql)
     {
         return this.conn.QuerySingle(sql);
@@ -104,9 +121,7 @@ public class SQLHandler
                 command.Parameters.AddWithValue(param);
             }
         }
-
         this.batch.BatchCommands.Add(command);
-        
     }
 
     public void ExecuteBatchCommand() {

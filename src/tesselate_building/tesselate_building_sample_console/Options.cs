@@ -26,9 +26,6 @@ namespace tesselate_building_sample_console
         [Option("heightcolumn", Required = false, Default = "height", HelpText = "height column")]
         public string HeightColumn { get; set; }
 
-        [Option("idcolumn", Required = false, Default = "id", HelpText = "Id column")]
-        public string IdColumn { get; set; }
-
         [Option("color", Required = false, Default = "#FFFFFF", HelpText = "Color in hex")]
         public string Color { get; set; }
 
