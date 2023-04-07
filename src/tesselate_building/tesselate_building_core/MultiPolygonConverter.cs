@@ -4,11 +4,11 @@ using Wkx;
 
 public class MultiPolygonConverter : Converter
 {
-    public override Geometry Convert(Geometry geometry, Building building)
+    public override PolyhedralSurface Convert(Geometry geometry, Building building)
     {
         MultiPolygon multiPolygon = (MultiPolygon)geometry.Geom;
         var polyhedral = TesselateBuilding.ToPolyhedral(multiPolygon);
 
-        return new Geometry(polyhedral);
+        return polyhedral;
     }
 }

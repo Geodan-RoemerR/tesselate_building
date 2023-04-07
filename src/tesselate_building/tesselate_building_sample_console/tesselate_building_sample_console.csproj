@@ -27,7 +27,6 @@
     <PackageReference Include="Newtonsoft.Json" Version="13.0.1" />
     <PackageReference Include="Npgsql" Version="7.0.2" />
     <PackageReference Include="Wkx" Version="0.5.1" />
-    <PackageReference Include="Npgsql.DependencyInjection" version="7.0.2"/>
     <FrameworkReference Include="Microsoft.AspNetCore.App" Version="6.0.15" />
   </ItemGroup>
 

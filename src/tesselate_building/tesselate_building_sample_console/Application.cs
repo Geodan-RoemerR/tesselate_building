@@ -7,7 +7,6 @@ using tesselate_building_core;
 using Wkx;
 using Microsoft.Extensions.Logging;
 using Microsoft.AspNetCore.Builder;
-using System.Collections.Generic;
 
 public class Application
 {
@@ -44,16 +43,17 @@ public class Application
             var rowCount = Convert.ToDouble(rowCountDapper.count);
 
             // Retrieve and save current primary key
-            var pkeySql = @$"SELECT a.attname FROM   pg_index i JOIN   pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) 
-                                                                WHERE  i.indrelid = '{o.Table}'::regclass AND i.indisprimary;";
+            var pkeySql = @$"SELECT a.attname FROM  pg_index i 
+                            JOIN pg_attribute a ON a.attrelid = i.indrelid AND a.attnum = ANY(i.indkey) 
+                            WHERE  i.indrelid = '{o.Table}'::regclass AND i.indisprimary;";
             var primaryKey = Convert.ToString(handler.QuerySingle(pkeySql).attname);
             
             // Remove primary key constraint and set it to auto increment table
             var pkConstraint = o.Table.Substring(o.Table.LastIndexOf('.') + 1) + "_pkey";
             app.Logger.LogInformation("Adding auto increment primary key for performance purpuses.");
             handler.CreateBatch();
-            handler.AddBatchCommand($"alter table {o.Table} drop column if exists {idColumn} cascade");
             handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP CONSTRAINT {pkConstraint}");
+            handler.AddBatchCommand($"alter table {o.Table} drop column if exists {idColumn} cascade");
             handler.AddBatchCommand($"ALTER TABLE {o.Table} ADD COLUMN {idColumn} SERIAL PRIMARY KEY;");
             handler.ExecuteBatchCommand();
  
@@ -118,12 +118,12 @@ public class Application
             app.Logger.LogInformation("Querying geometries...");
             var heightSql = (singularGeom is Polygon ? $"{o.HeightColumn} as height, " : "");
             var completeGeomSql = @$"select ST_AsBinary({o.InputGeometryColumn}) as geometry, 
-                                     {heightSql}{idColumn} as id from {o.Table} ORDER BY gid";
+                                     {heightSql}{idColumn} as id from {o.Table} ORDER BY {idColumn}";
 
 
             app.Logger.LogInformation($"Num geometries to tesselate: {rowCount}");
             var chunk = 1000;
-            var offset = 0;
+            var offset = 5000000;
             var k = 0;
             while(k < Convert.ToInt32(rowCount)) {
                 
@@ -143,8 +143,8 @@ public class Application
                     var building = parser(reader);
 
                     // Convert geometry to traingulated polyhedralsurface
-                    var polyhedral = converter.Convert(new Geometry(building.Geometry), building).Geom;
-                
+                    var polyhedral = converter.Convert(new Geometry(building.Geometry), building);
+
                     // Geometry to wkt format
                     var wkt = polyhedral.SerializeString<WktSerializer>();
 
@@ -163,8 +163,10 @@ public class Application
                 }
                 reader.Close();
                 handler.batch.ExecuteNonQuery();    
+
                 stopWatch.Stop();
                 app.Logger.LogInformation($"Time spent: {stopWatch.ElapsedMilliseconds / 1000} sec");
+
                 offset += chunk;
                 app.Logger.LogInformation($"Tesselated and inserted {offset}/{rowCount} geometries.");
             }
@@ -197,10 +199,10 @@ public class Application
             handler.ExecuteNonQuery(indexSql);
 
             // Reset primary key
-            handler.CreateBatch();
-            handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP CONSTRAINT {pkConstraint}");
-            handler.AddBatchCommand($"ALTER TABLE {o.Table} ADD PIMRARY KEY ({primaryKey})");
-            handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP COLUMN {idColumn} CASCADE");
+            handler.CreateBatch(); 
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP CONSTRAINT {pkConstraint};");
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} ADD CONSTRAINT {pkConstraint} PRIMARY KEY ({primaryKey});");
+            handler.AddBatchCommand($"ALTER TABLE {o.Table} DROP COLUMN {idColumn} CASCADE;");
             handler.ExecuteBatchCommand();
 
             // Close connection

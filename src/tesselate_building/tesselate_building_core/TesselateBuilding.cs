@@ -21,6 +21,8 @@ namespace tesselate_building_core
             var walls = MakeWalls(footprint, fromZ, height - fromZ);
             polyhedral.Geometries.AddRange(walls);
 
+
+
             var stream = new MemoryStream();
             polyhedral.Serialize<WkbSerializer>(stream);
             var wkb = stream.ToArray();
@@ -80,6 +82,9 @@ namespace tesselate_building_core
                     polyhedral.Geometries.Add(polygon);
                 }
 
+            } else if (geometry is PolyhedralSurface) 
+            {
+                polyhedral = (PolyhedralSurface)geometry;
             }
 
             // Triangulate polyhedralsurface
@@ -88,9 +93,9 @@ namespace tesselate_building_core
             var wkb = stream.ToArray();
             var triangulatedWkb = Triangulator.Triangulate(wkb);
             var polyhedralNew = (PolyhedralSurface)Wkx.Geometry.Deserialize<WkbSerializer>(triangulatedWkb);
+            
 
             return polyhedralNew;
         }
-
     }
 }

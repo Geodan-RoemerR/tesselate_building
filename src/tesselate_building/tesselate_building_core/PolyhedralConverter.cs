@@ -4,11 +4,11 @@ using Wkx;
 
 public class PolyhedralConverter : Converter
 {
-    public override Geometry Convert(Geometry geometry, Building building)
+    public override PolyhedralSurface Convert(Geometry geometry, Building building)
     {
         var polyhedral = new PolyhedralSurface();
         polyhedral.Dimension = Dimension.Xyz;
-        polyhedral = (PolyhedralSurface)building.Geometry;
-        return geometry;
+        polyhedral = TesselateBuilding.ToPolyhedral(geometry.Geom);
+        return polyhedral;
     }
 }

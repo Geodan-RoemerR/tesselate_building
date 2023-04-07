@@ -6,7 +6,7 @@ public class PolygonConverter : Converter
 {
 
 
-    public override Geometry Convert(Geometry geometry, Building building)
+    public override PolyhedralSurface Convert(Geometry geometry, Building building)
     {
         var polygon = (Polygon)geometry.Geom;
         var wktFootprint = polygon.SerializeString<WktSerializer>();
@@ -15,6 +15,6 @@ public class PolygonConverter : Converter
 
         var buildingZ = 0; //put everything on the ground
         var polyhedral = TesselateBuilding.MakeBuilding(polygon, buildingZ, height);
-        return new Geometry(polyhedral);
+        return polyhedral;
     }
 }
