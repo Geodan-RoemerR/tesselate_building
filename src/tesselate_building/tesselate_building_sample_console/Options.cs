@@ -28,6 +28,9 @@ namespace tesselate_building_sample_console
 
         [Option("color", Required = false, Default = "#FFFFFF", HelpText = "Color in hex")]
         public string Color { get; set; }
+               
+        [Option("tesselated", Required = true, Default = false, HelpText = "Tesselated polyhedralsurfaces.")]
+        public bool? Tesselated { get; set; }
 
     }
 }
